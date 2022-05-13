@@ -1,4 +1,16 @@
 # GrijjyCloudLogger, *remote logging for Windows, iOS, Android, macOS and Linux*
+
+# :construction: Fork information :construction:
+The reason for this fork is to implement a way to display the Threads that sent the log message.
+- [X] Display Threads
+- [ ] Detect terminated Threads
+- [ ] Reuse Threads "lanes" once the occupying thread terminates
+
+![Screenshot 2022-05-13 112250](https://user-images.githubusercontent.com/73490004/168254447-2d0d1f54-ccba-45a9-9a3d-ff02a0f07ac6.png)
+
+
+---
+
 GrijjyCloudLogger is a remote logging tool that allows you to send log messages over the Intranet or Internet from Windows, Linux, iOS, Android and macOS devices to a viewer running on Windows.  Besides sending messages along with any data, it has numerous features including custom live watches, remote live views of objects, tracking live memory usage, object allocations, growth leaks and more.	 
 
 Here at Grijjy we use this tool on a daily basis to help us diagnose run-time related issues with our applications running on various platforms.  Our logger helps us easily examine the run-time state of our application running on iOS and Android devices, which can be difficult using the debugger or mobile platform specific logging features.  We developed this utility because we needed a high-performance remote logger that worked on all platforms and operating systems and we wanted unified, run-time debug related capabilities like memory and object tracking from these respective platforms.
