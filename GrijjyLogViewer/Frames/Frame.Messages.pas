@@ -228,7 +228,7 @@ var
     FCurrentProcess.ThreadDisplayInfos.TryGetValue(AKey, VInfo);
     //what if invalid info(?)
 
-    if (Index < VInfo.StartIndex) or (Index > VInfo.EndIndex) then
+    if (Index < VInfo.StartIndex) {or (Index > VInfo.EndIndex)} then
       exit;
 
     var style: TBrushStyle;
