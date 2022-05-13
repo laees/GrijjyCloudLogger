@@ -10,6 +10,7 @@ uses
   System.SyncObjs,
   System.Generics.Defaults,
   System.Generics.Collections,
+  Vcl.Graphics,
   Grijjy.CloudLogging.Protocol,
   LogMessages,
   Usage,
@@ -22,6 +23,15 @@ const
     removed. }
   MAX_MESSAGES_PER_PROCESS = 10000;
 
+type
+  TThreadDisplayInfo = packed record
+    public
+      Key: Cardinal;
+      Color: TColor;
+      StartIndex: Integer;
+      EndIndex: Integer;
+      XOffset: Integer;
+  end;
 type
   TgoProcess = class;
 
@@ -64,6 +74,7 @@ type
     FLiveWatches: TBytes;
     FLiveWatchesLock: TCriticalSection;
     FListener: IgoProcessListener;
+    FThreadDisplayInfos: TDictionary<Cardinal,TThreadDisplayInfo>;
   private
     { These fields may only be modified from the main UI thread: }
     FMessages: TgoLogMessages;
@@ -126,6 +137,19 @@ type
 
     { Index of the currently selected message }
     property SelectedMessageIndex: Integer read FSelectedMessageIndex write FSelectedMessageIndex;
+
+    { Dictionary of Information needed to draw Threads }
+    property ThreadDisplayInfos: TDictionary<Cardinal, TThreadDisplayInfo> read FThreadDisplayInfos write FThreadDisplayInfos;
+
+    { Pxl Offset of Thread furthest to the right }
+    function GetBiggestThreadOffset: Integer;
+
+    { Pxl Width of Threads }
+    const THREAD_WIDTH = 5;
+
+    { Pxl Width of space between Threads}
+    const THREAD_SPACING = 6;
+
   public
     (*********************************************
      * Memory Usage
@@ -208,6 +232,16 @@ end;
 
 { TgoProcess }
 
+function TgoProcess.GetBiggestThreadOffset: integer;
+begin
+  result := 0;
+  for var i: TThreadDisplayInfo in FThreadDisplayInfos.Values.ToArray do
+  begin
+    if i.XOffset > result then
+      result := i.XOffset;
+  end;
+end;
+
 procedure TgoProcess.AddLogMessage(const ALogMessage: TgoLogMessage);
 begin
   { This method is called from the ZMQ thread. We store the message in the
@@ -263,6 +297,8 @@ begin
 
   if (FInstanceComparer = nil) then
     FInstanceComparer := TInstanceComparer.Create;
+
+  FThreadDisplayInfos := TDictionary<Cardinal, TThreadDisplayInfo>.Create;
 end;
 
 destructor TgoProcess.Destroy;
@@ -276,6 +312,7 @@ begin
   FNewMessagesLock.Free;
   FNewMessages.Free;
   FMessages.Free;
+  FThreadDisplayInfos.Free;
   inherited;
 end;
 
@@ -293,6 +330,25 @@ begin
 end;
 
 function TgoProcess.HasNewMessages(out AOldMessagesPurged: Boolean): Boolean;
+var
+  Key: Cardinal;
+  MaxOffset: Integer;
+  Info: TThreadDisplayInfo;
+  InsertIndex: Integer;
+
+  function GenerateRandomThreadColor(const Mix: TColor = clWhite): TColor;
+  var
+    Red, Green, Blue: Integer;
+  begin
+    Red := Random(256);
+    Green := Random(256);
+    Blue := Random(256);
+
+    Red := (Red + GetRValue(ColorToRGB(Mix))) div 2;
+    Green := (Green + GetGValue(ColorToRGB(Mix))) div 2;
+    Blue := (Blue + GetBValue(ColorToRGB(Mix))) div 2;
+    Result := RGB(Red, Green, Blue);
+  end;
 begin
   { This method is (usually) called from the UI thread. Check for new messages
     and move these over to the main list, so the UI can safely access them
@@ -305,6 +361,31 @@ begin
     begin
       if (FMessages.Count = 0) then
         FFirstMessageTime := FNewMessages[0].TimeStamp;
+
+      for var CurrMsg: TgoLogMessage in FNewMessages do
+      begin
+
+        InsertIndex := Fmessages.Add(CurrMsg);
+
+        Key := CurrMsg.ThreadId;
+        MaxOffset := GetBiggestThreadOffset;
+        Info.Key := Key;
+        Info.Color := clBlack;
+        Info.XOffset := 0;
+        Info.StartIndex := 0;
+        Info.EndIndex := 0;
+
+        FThreadDisplayInfos.TryGetValue(Key,Info);
+
+        if Info.Color = clBlack then
+        begin
+          Info.Color := GenerateRandomThreadColor(clTeal);
+          Info.XOffset := MaxOffset + THREAD_WIDTH + THREAD_SPACING;
+          Info.StartIndex := InsertIndex;
+          FThreadDisplayInfos.AddOrSetValue(Key, Info);
+          //TODO: Add a way to remove threads so XPos can decrease once a thread finishes
+        end;
+      end;
 
       FMessages.AddRange(FNewMessages);
 
@@ -323,6 +404,7 @@ begin
       begin
         FMessages.DeleteRange(0, Max(MAX_MESSAGES_PER_PROCESS div 10, FMessages.Count - MAX_MESSAGES_PER_PROCESS));
         AOldMessagesPurged := True;
+        //TODO: adjust ThreadDisplayInfo start&end indices here
       end;
     end;
   finally

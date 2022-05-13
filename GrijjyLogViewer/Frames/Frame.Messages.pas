@@ -1,4 +1,4 @@
-unit Frame.Messages;
+﻿unit Frame.Messages;
 
 interface
 
@@ -211,12 +211,67 @@ end;
 procedure TFrameMessages.ListViewMessagesCustomDrawItem(Sender: TCustomListView;
   Item: TListItem; State: TCustomDrawState; var DefaultDraw: Boolean);
 var
+  Key: Cardinal;
+  Info: TThreadDisplayInfo;
   Index: Integer;
   LogMsg: TgoLogMessage;
   Canvas: TCanvas;
   Time: TDateTime;
   R: TRect;
   S: String;
+
+  procedure DrawThread(AKey: Cardinal);
+  var
+    VInfo: TThreadDisplayInfo;
+  begin
+
+    FCurrentProcess.ThreadDisplayInfos.TryGetValue(AKey, VInfo);
+    //what if invalid info(?)
+
+    if (Index < VInfo.StartIndex) or (Index > VInfo.EndIndex) then
+      exit;
+
+    var style: TBrushStyle;
+    var RT: TRect := R;
+    inc(RT.Left, 2 + VInfo.XOffset);
+
+    if AKey = Key then
+    begin
+      style := bsSolid;
+      RT.Right := RT.Left + TgoProcess.THREAD_WIDTH;
+    end
+    else
+    begin
+      style := bsSolid;
+      inc(RT.Left,2);
+      RT.Right := RT.Left + 1;
+    end;
+
+    var previousBrush := Canvas.Brush;
+    if Index = VInfo.EndIndex then
+    begin
+      RT.Bottom := Round((RT.Bottom - RT.Top)/2);
+      var RE: TRect := RT;
+      dec(RE.Left, 2);
+      inc(RE.Right, 2);
+
+      Canvas.Brush.Color := VInfo.Color;
+      Canvas.Brush.Style := style;
+      Canvas.FillRect(RT);
+      Canvas.FillRect(RE);
+      Canvas.Brush := previousBrush;
+    end else begin
+      Canvas.Brush.Color := VInfo.Color;
+      Canvas.Brush.Style := style;
+      Canvas.FillRect(RT);
+      Canvas.Brush := previousBrush;
+    end;
+
+    RT := R;
+    inc(RT.Left, 2 + VInfo.XOffset);
+    RT.Right := RT.Left + TgoProcess.THREAD_WIDTH;
+  end;
+
 begin
   Assert(Assigned(Item));
   if (FCurrentMessages = nil) then
@@ -237,10 +292,28 @@ begin
     Canvas.Brush.Color := clBtnFace
   else
     Canvas.Brush.Color := clWhite;
+
   Canvas.FillRect(R);
 
-  { Paint message }
+  { Paint Threads }
   R := Item.DisplayRect(drLabel);
+  S := LogMsg.Message;
+
+  //TODO: add message type for Terminated Thread, like Enter/Leave method (?)
+  if S = 'Terminated' then
+  begin
+    Info.EndIndex := Index;
+  end;
+
+  Key := LogMsg.ThreadId;
+  for var currThreadId in FCurrentProcess.ThreadDisplayInfos.Keys do
+  begin
+    DrawThread(currThreadId);
+  end;
+
+  R.Left := R.Left + 2 + FCurrentProcess.GetBiggestThreadOffset + 8;
+
+  { Paint message }
   Inc(R.Left, LogMsg.Indent shl 4);
   ImageListMessages.Draw(Canvas, R.Left, R.Top + (R.Height - ICON_HEIGHT) div 2, Ord(LogMsg.Level));
   Inc(R.Left, 20);
@@ -249,7 +322,7 @@ begin
     ImageListMessages.Draw(Canvas, R.Left, R.Top + (R.Height - ICON_HEIGHT) div 2, 5 + Ord(LogMsg.DataFormat));
     Inc(R.Left, 20);
   end;
-  S := LogMsg.Message;
+
   Canvas.TextRect(R, S, TEXT_FORMAT);
 
   { Paint timestamp }
